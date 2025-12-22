@@ -8,4 +8,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: gpu-nodepool-operator
 repo: github.com/PMuku/gpu-nodepool-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8s.local
+  group: nodepool
+  kind: NodePool
+  path: github.com/PMuku/gpu-nodepool-operator/api/v1
+  version: v1
 version: "3"

@@ -1,0 +1,9 @@
+apiVersion: nodepool.k8s.local/v1
+kind: NodePool
+metadata:
+  labels:
+    app.kubernetes.io/name: gpu-nodepool-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: nodepool-sample
+spec:
+  # TODO(user): Add fields here
