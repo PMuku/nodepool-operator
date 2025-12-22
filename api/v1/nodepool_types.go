@@ -23,39 +23,51 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// NodePoolPhase (enum) represents the phase of a NodePool
+type NodePoolPhase string
+
+const (
+	NodePoolPhaseReady    NodePoolPhase = "Ready"
+	NodePoolPhasePending  NodePoolPhase = "Pending"
+	NodePoolPhaseDegraded NodePoolPhase = "Degraded"
+)
+
 // NodePoolSpec defines the desired state of NodePool
 type NodePoolSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of NodePool. Edit nodepool_types.go to remove/update
+	// NodePool size
+	// +kubebuilder:validation:Minimum=1
+	Size int32 `json:"size"`
+
+	// Label applied to nodes in the pool (key=value)
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_.-]+=[a-zA-Z0-9_.-]+$`
+	Label string `json:"label"`
+
+	// Taint applied to nodes in the pool (key=value:effect)
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	Taint *string `json:"taint,omitempty"` // optional field
 }
 
 // NodePoolStatus defines the observed state of NodePool.
 type NodePoolStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// conditions represent the current state of the NodePool resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
-	// +listType=map
-	// +listMapKey=type
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// Phase indicates the overall health of the NodePool
+	// +kubebuilder:validation:Enum=Ready;Pending;Degraded
+
+	CurrentSize int32 `json:"currentSize,omitempty"`
+	DesiredSize int32 `json:"desiredSize,omitempty"`
+	// Phase indicates the overall health of the NodePool
+	// +kubebuilder:validation:Enum=Ready;Pending;Degraded
+	Phase         NodePoolPhase `json:"phase,omitempty"`
+	AssignedNodes []string      `json:"assignedNodes,omitempty"`
+	Message       string        `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
