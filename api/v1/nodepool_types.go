@@ -46,6 +46,10 @@ type NodePoolSpec struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_.-]+=[a-zA-Z0-9_.-]+$`
 	Label string `json:"label"`
 
+	// NodeSelector defines required labels for eligible nodes
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
 	// Taint applied to nodes in the pool (key=value:effect)
 	// +optional
 	Taint *string `json:"taint,omitempty"` // optional field
