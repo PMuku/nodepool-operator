@@ -52,6 +52,11 @@ var _ = Describe("NodePool Controller", func() {
 						Namespace: "default",
 					},
 					// TODO(user): Specify other spec details if needed.
+
+					Spec: nodepoolv1.NodePoolSpec{
+						Size:  1,
+						Label: "pool=test",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
