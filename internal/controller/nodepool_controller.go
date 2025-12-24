@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +37,7 @@ type NodePoolReconciler struct {
 // +kubebuilder:rbac:groups=nodepool.k8s.local,resources=nodepools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=nodepool.k8s.local,resources=nodepools/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=nodepool.k8s.local,resources=nodepools/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -47,9 +49,26 @@ type NodePoolReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the NodePool instance
+	var nodePool nodepoolv1.NodePool
+	if err := r.Get(ctx, req.NamespacedName, &nodePool); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// List all Kubernetes nodes in the cluster
+	var nodeList corev1.NodeList
+	if err := r.List(ctx, &nodeList); err != nil {
+		log.Error(err, "Failed to list nodes")
+		return ctrl.Result{}, err
+	}
+
+	// Log cluster state
+	log.Info("NodePool reconciliation",
+		"nodepool", nodePool.Name,
+		"desiredSize", nodePool.Spec.Size,
+		"totalClusterNodes", len(nodeList.Items))
 
 	return ctrl.Result{}, nil
 }
