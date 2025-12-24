@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,18 +56,35 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// List all Kubernetes nodes in the cluster
-	var nodeList corev1.NodeList
-	if err := r.List(ctx, &nodeList); err != nil {
-		log.Error(err, "Failed to list nodes")
+	assigned, err := r.getAssignedNodes(ctx, &nodePool)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Log cluster state
-	log.Info("NodePool reconciliation",
+	usableAssigned, err := r.getUsableAssignedNodes(ctx, &nodePool)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	eligibleUnassigned, err := r.getEligibleUnassignedNodes(ctx, &nodePool)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	safeToRelease, err := r.getSafeToReleaseAssignedNodes(ctx, &nodePool)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Log nodepool state
+	log.Info("NodePool reconciliation state",
 		"nodepool", nodePool.Name,
 		"desiredSize", nodePool.Spec.Size,
-		"totalClusterNodes", len(nodeList.Items))
+		"assigned", len(assigned),
+		"usableAssigned", len(usableAssigned),
+		"eligibleUnassigned", len(eligibleUnassigned),
+		"safeToRelease", len(safeToRelease),
+	)
 
 	return ctrl.Result{}, nil
 }
