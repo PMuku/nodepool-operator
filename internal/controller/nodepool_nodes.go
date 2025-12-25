@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -136,4 +138,66 @@ func matchesNodeSelector(node *corev1.Node, selector map[string]string) bool {
 func isInMaintenance(node *corev1.Node) bool {
 	_, exists := node.Labels["nodepool.k8s.local/maintenance"]
 	return exists
+}
+
+func parseTaint(s string) (corev1.Taint, error) {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return corev1.Taint{}, fmt.Errorf("invalid taint %q", s)
+	}
+
+	kv := strings.SplitN(parts[0], "=", 2)
+	if len(kv) != 2 {
+		return corev1.Taint{}, fmt.Errorf("invalid taint %q", s)
+	}
+
+	return corev1.Taint{
+		Key:    kv[0],
+		Value:  kv[1],
+		Effect: corev1.TaintEffect(parts[1]),
+	}, nil
+}
+
+func (r *NodePoolReconciler) assignNodeToPool(ctx context.Context, node *corev1.Node, nodePool *nodepoolv1.NodePool) error {
+	labelParts := strings.SplitN(nodePool.Spec.Label, "=", 2)
+	if len(labelParts) != 2 {
+		return fmt.Errorf("invalid label %q, expected key=value", nodePool.Spec.Label)
+	}
+	labelKey, labelVal := labelParts[0], labelParts[1]
+
+	var taint corev1.Taint
+	if nodePool.Spec.Taint != "" {
+		var err error
+		taint, err = parseTaint(nodePool.Spec.Taint)
+		if err != nil {
+			return err
+		}
+	} else {
+		taint = corev1.Taint{
+			Key:    labelKey,
+			Value:  labelVal,
+			Effect: corev1.TaintEffectNoSchedule,
+		}
+	}
+
+	original := node.DeepCopy()
+
+	if node.Labels == nil {
+		node.Labels = map[string]string{}
+	}
+	node.Labels[labelKey] = labelVal
+	node.Labels[poolLabelKey] = nodePool.Name
+
+	taintExists := false
+	for _, t := range node.Spec.Taints {
+		if t.Key == taint.Key && t.Value == taint.Value && t.Effect == taint.Effect {
+			taintExists = true
+			break
+		}
+	}
+	if !taintExists {
+		node.Spec.Taints = append(node.Spec.Taints, taint)
+	}
+
+	return r.Patch(ctx, node, client.MergeFrom(original))
 }

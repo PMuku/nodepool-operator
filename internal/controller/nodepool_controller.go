@@ -82,6 +82,7 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	usableAssignedCount := len(usableAssigned)
 	eligibleUnassignedCount := len(eligibleUnassigned)
 	safeToReleaseCount := len(safeToRelease)
+	desiredCount := int(nodePool.Spec.Size)
 
 	// Log nodepool state
 	log.Info("NodePool reconciliation state",
@@ -92,6 +93,17 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		"eligibleUnassigned", eligibleUnassignedCount,
 		"safeToRelease", safeToReleaseCount,
 	)
+
+	// Scale-up
+	needed := desiredCount - usableAssignedCount
+	if needed > 0 && eligibleUnassignedCount > 0 {
+		toAssign := min(needed, eligibleUnassignedCount)
+		for i := 0; i < toAssign; i++ {
+			if err := r.assignNodeToPool(ctx, &eligibleUnassigned[i], &nodePool); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
