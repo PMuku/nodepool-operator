@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -107,39 +106,31 @@ func isNodeEligible(node *corev1.Node, nodePool *nodepoolv1.NodePool) bool {
 	}
 
 	// generic nodeselector matching
-	if nodePool.Spec.NodeSelector != nil {
-		if !matchesNodeSelector(node, nodePool.Spec.NodeSelector) {
-			return false
-		}
+	if nodePool.Spec.NodeSelector == nil {
+		return !isGpuNode(node)
 	}
 
-	return true
+	return matchesNodeSelector(node, nodePool.Spec.NodeSelector)
+}
+
+func isGpuNode(node *corev1.Node) bool {
+	if qty, exists := node.Status.Capacity[corev1.ResourceName("nvidia.com/gpu")]; exists && !qty.IsZero() {
+		return true
+	}
+	if val, exists := node.Labels["nvidia.com/gpu.present"]; exists && val == "true" {
+		return true
+	}
+	return false
 }
 
 func matchesNodeSelector(node *corev1.Node, selector map[string]string) bool {
 	for key, val := range selector {
-		if isResourceSelector(key) {
-			qty, exists := node.Status.Capacity[corev1.ResourceName(key)]
-			if exists {
-				if qty.IsZero() {
-					return false
-				}
-				continue
-			}
-		}
 		nodeVal, exists := node.Labels[key]
 		if !exists || nodeVal != val {
 			return false
 		}
 	}
 	return true
-}
-
-func isResourceSelector(key string) bool {
-	return strings.Contains(key, "/") ||
-		key == "cpu" ||
-		key == "memory" ||
-		key == "nvidia.com/gpu"
 }
 
 func isInMaintenance(node *corev1.Node) bool {
