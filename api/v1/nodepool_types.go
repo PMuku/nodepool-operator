@@ -52,7 +52,7 @@ type NodePoolSpec struct {
 
 	// Taint applied to nodes in the pool (key=value:effect)
 	// +optional
-	Taint *string `json:"taint,omitempty"` // optional field
+	Taint string `json:"taint,omitempty"` // optional field
 }
 
 // NodePoolStatus defines the observed state of NodePool.
