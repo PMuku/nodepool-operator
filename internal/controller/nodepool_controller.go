@@ -19,9 +19,11 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
@@ -76,14 +78,19 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
+	assignedCount := len(assigned)
+	usableAssignedCount := len(usableAssigned)
+	eligibleUnassignedCount := len(eligibleUnassigned)
+	safeToReleaseCount := len(safeToRelease)
+
 	// Log nodepool state
 	log.Info("NodePool reconciliation state",
 		"nodepool", nodePool.Name,
 		"desiredSize", nodePool.Spec.Size,
-		"assigned", len(assigned),
-		"usableAssigned", len(usableAssigned),
-		"eligibleUnassigned", len(eligibleUnassigned),
-		"safeToRelease", len(safeToRelease),
+		"assigned", assignedCount,
+		"usableAssigned", usableAssignedCount,
+		"eligibleUnassigned", eligibleUnassignedCount,
+		"safeToRelease", safeToReleaseCount,
 	)
 
 	return ctrl.Result{}, nil
@@ -93,6 +100,43 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *NodePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&nodepoolv1.NodePool{}).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueAllNodePools),
+		).
 		Named("nodepool").
 		Complete(r)
+}
+
+func (r *NodePoolReconciler) enqueueAllNodePools(
+	ctx context.Context,
+	obj client.Object,
+) []ctrl.Request {
+
+	node, ok := obj.(*corev1.Node)
+	if ok {
+		// Ignore control-plane / master nodes
+		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
+			return nil
+		}
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+			return nil
+		}
+	}
+
+	var pools nodepoolv1.NodePoolList
+	if err := r.List(ctx, &pools); err != nil {
+		return nil
+	}
+
+	reqs := make([]ctrl.Request, 0, len(pools.Items))
+	for _, p := range pools.Items {
+		reqs = append(reqs, ctrl.Request{
+			NamespacedName: client.ObjectKey{
+				Name:      p.Name,
+				Namespace: p.Namespace,
+			},
+		})
+	}
+	return reqs
 }
