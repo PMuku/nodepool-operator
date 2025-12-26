@@ -62,9 +62,6 @@ type NodePoolStatus struct {
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// Phase indicates the overall health of the NodePool
-	// +kubebuilder:validation:Enum=Ready;Pending;Degraded
-
 	CurrentSize int32 `json:"currentSize,omitempty"`
 	DesiredSize int32 `json:"desiredSize,omitempty"`
 	// Phase indicates the overall health of the NodePool
