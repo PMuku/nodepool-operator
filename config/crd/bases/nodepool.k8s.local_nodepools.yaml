@@ -68,10 +68,6 @@ spec:
                   type: string
                 type: array
               currentSize:
-                enum:
-                - Ready
-                - Pending
-                - Degraded
                 format: int32
                 type: integer
               desiredSize:

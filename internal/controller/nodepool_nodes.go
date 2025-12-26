@@ -201,3 +201,45 @@ func (r *NodePoolReconciler) assignNodeToPool(ctx context.Context, node *corev1.
 
 	return r.Patch(ctx, node, client.MergeFrom(original))
 }
+
+func (r *NodePoolReconciler) releaseNodeFromPool(ctx context.Context, node *corev1.Node, nodePool *nodepoolv1.NodePool) error {
+	original := node.DeepCopy()
+
+	delete(node.Labels, poolLabelKey)
+
+	if nodePool.Spec.Label != "" {
+		parts := strings.SplitN(nodePool.Spec.Label, "=", 2)
+		if len(parts) == 2 {
+			delete(node.Labels, parts[0])
+		}
+	}
+
+	var taintToRemove *corev1.Taint
+	if nodePool.Spec.Taint != "" {
+		taint, err := parseTaint(nodePool.Spec.Taint)
+		if err != nil {
+			return err
+		}
+		taintToRemove = &taint
+	} else {
+		parts := strings.SplitN(nodePool.Spec.Label, "=", 2)
+		if len(parts) == 2 {
+			taintToRemove = &corev1.Taint{
+				Key:    parts[0],
+				Value:  parts[1],
+				Effect: corev1.TaintEffectNoSchedule,
+			}
+		}
+	}
+	if taintToRemove != nil {
+		newTaints := node.Spec.Taints[:0]
+		for _, t := range node.Spec.Taints {
+			if t.Key == taintToRemove.Key && t.Value == taintToRemove.Value && t.Effect == taintToRemove.Effect {
+				continue
+			}
+			newTaints = append(newTaints, t)
+		}
+		node.Spec.Taints = newTaints
+	}
+	return r.Patch(ctx, node, client.MergeFrom(original))
+}
