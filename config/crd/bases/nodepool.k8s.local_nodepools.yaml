@@ -51,7 +51,7 @@ spec:
               size:
                 description: NodePool size
                 format: int32
-                minimum: 1
+                minimum: 0
                 type: integer
               taint:
                 description: Taint applied to nodes in the pool (key=value:effect)

@@ -39,7 +39,7 @@ type NodePoolSpec struct {
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
 	// NodePool size
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	Size int32 `json:"size"`
 
 	// Label applied to nodes in the pool (key=value)
