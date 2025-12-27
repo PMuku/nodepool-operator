@@ -97,7 +97,8 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 
 	// Scale-up
-	needed := desiredCount - usableAssignedCount
+	effectiveAssignedCount := usableAssignedCount + safeToReleaseCount
+	needed := desiredCount - effectiveAssignedCount
 	if needed > 0 && eligibleUnassignedCount > 0 {
 		toAssign := min(needed, eligibleUnassignedCount)
 		for i := 0; i < toAssign; i++ {
@@ -124,7 +125,7 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	original := nodePool.DeepCopy()
 	newStatus := nodePool.Status.DeepCopy()
 	newStatus.DesiredSize = int32(desiredCount)
-	newStatus.CurrentSize = int32(usableAssignedCount)
+	newStatus.CurrentSize = int32(effectiveAssignedCount)
 	newStatus.AssignedNodes = make([]string, 0, len(assigned))
 	for _, n := range assigned {
 		newStatus.AssignedNodes = append(newStatus.AssignedNodes, n.Name)
@@ -155,10 +156,19 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			desiredCount-usableAssignedCount,
 		)
 
+	case usableAssignedCount < desiredCount && safeToReleaseCount > 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhaseDegraded
+		newStatus.Message = fmt.Sprintf(
+			"Pool degraded: %d/%d nodes available (%d in maintenance)",
+			usableAssignedCount,
+			desiredCount,
+			safeToReleaseCount,
+		)
+
 	case usableAssignedCount > desiredCount && safeToReleaseCount == 0:
 		newStatus.Phase = nodepoolv1.NodePoolPhasePending
 		newStatus.Message = fmt.Sprintf(
-			"Over capacity (%d/%d), waiting for nodes to be marked safe for release",
+			"Over capacity (%d/%d), waiting for nodes to be cordoned",
 			usableAssignedCount,
 			desiredCount,
 		)
