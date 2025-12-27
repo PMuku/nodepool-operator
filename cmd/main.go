@@ -35,8 +35,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
-	"github.com/PMuku/gpu-nodepool-operator/internal/controller"
+	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
+	"github.com/PMuku/nodepool-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

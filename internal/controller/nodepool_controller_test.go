@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
+	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
 )
 
 var _ = Describe("NodePool Controller", func() {

@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
+	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

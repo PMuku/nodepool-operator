@@ -1,4 +1,4 @@
-module github.com/PMuku/gpu-nodepool-operator
+module github.com/PMuku/nodepool-operator
 
 go 1.24.6
 

@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
+	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
 )
 
 const (

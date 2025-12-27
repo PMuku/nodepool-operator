@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	nodepoolv1 "github.com/PMuku/gpu-nodepool-operator/api/v1"
+	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
 )
 
 // NodePoolReconciler reconciles a NodePool object

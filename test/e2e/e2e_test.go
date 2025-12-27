@@ -30,20 +30,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/PMuku/gpu-nodepool-operator/test/utils"
+	"github.com/PMuku/nodepool-operator/test/utils"
 )
 
 // namespace where the project is deployed in
-const namespace = "gpu-nodepool-operator-system"
+const namespace = "nodepool-operator-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "gpu-nodepool-operator-controller-manager"
+const serviceAccountName = "nodepool-operator-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "gpu-nodepool-operator-controller-manager-metrics-service"
+const metricsServiceName = "nodepool-operator-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "gpu-nodepool-operator-metrics-binding"
+const metricsRoleBindingName = "nodepool-operator-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -176,7 +176,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=gpu-nodepool-operator-metrics-reader",
+				"--clusterrole=nodepool-operator-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
