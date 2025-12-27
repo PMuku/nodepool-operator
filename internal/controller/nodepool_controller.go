@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -311,7 +312,7 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
