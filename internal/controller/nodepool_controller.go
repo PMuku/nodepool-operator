@@ -23,6 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,7 +36,8 @@ import (
 // NodePoolReconciler reconciles a NodePool object
 type NodePoolReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Finalizer for NodePool
@@ -74,6 +76,16 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if err := r.releaseNodeFromPool(ctx, &assigned[i], &nodePool); err != nil {
 				return ctrl.Result{}, err
 			}
+		}
+
+		// record finalizer cleanup
+		if r.Recorder != nil {
+			r.Recorder.Eventf(
+				&nodePool,
+				corev1.EventTypeNormal,
+				"CleanedUp",
+				"Released all nodes and removed NodePool finalizer",
+			)
 		}
 
 		// Remove finalizer
@@ -132,10 +144,36 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	needed := desiredCount - effectiveAssignedCount
 	if needed > 0 && eligibleUnassignedCount > 0 {
 		toAssign := min(needed, eligibleUnassignedCount)
+
+		successfulAssign, failure := 0, false
 		for i := 0; i < toAssign; i++ {
 			if err := r.assignNodeToPool(ctx, &eligibleUnassigned[i], &nodePool); err != nil {
+				// record scale-up failure
+				if r.Recorder != nil && !failure {
+					r.Recorder.Eventf(
+						&nodePool,
+						corev1.EventTypeWarning,
+						"AssignFailed",
+						"Failed to assign node %s: %v",
+						eligibleUnassigned[i].Name,
+						err,
+					)
+					failure = true
+				}
 				return ctrl.Result{}, err
 			}
+			successfulAssign++
+		}
+
+		// record scale-up success
+		if r.Recorder != nil && successfulAssign > 0 {
+			r.Recorder.Eventf(
+				&nodePool,
+				corev1.EventTypeNormal,
+				"ScaledUp",
+				"Assigned %d node(s) to pool",
+				successfulAssign,
+			)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -144,15 +182,43 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	excess := assignedCount - desiredCount
 	if excess > 0 && safeToReleaseCount > 0 {
 		toRelease := min(excess, safeToReleaseCount)
+
+		successfulRelease, failure := 0, false
 		for i := 0; i < toRelease; i++ {
 			if err := r.releaseNodeFromPool(ctx, &safeToRelease[i], &nodePool); err != nil {
+				// record scale-down failure
+				if r.Recorder != nil && !failure {
+					r.Recorder.Eventf(
+						&nodePool,
+						corev1.EventTypeWarning,
+						"ReleaseFailed",
+						"Failed to release node %s: %v",
+						safeToRelease[i].Name,
+						err,
+					)
+					failure = true
+				}
 				return ctrl.Result{}, err
 			}
+			successfulRelease++
 		}
+
+		// record scale-down success
+		if r.Recorder != nil && successfulRelease > 0 {
+			r.Recorder.Eventf(
+				&nodePool,
+				corev1.EventTypeNormal,
+				"ScaledDown",
+				"Released %d node(s) from pool",
+				successfulRelease,
+			)
+		}
+
 		return ctrl.Result{}, nil
 	}
 
 	// Status update
+
 	original := nodePool.DeepCopy()
 	newStatus := nodePool.Status.DeepCopy()
 	newStatus.DesiredSize = int32(desiredCount)
@@ -217,6 +283,28 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	nodePool.Status = *newStatus
 
 	if !reflect.DeepEqual(original.Status, nodePool.Status) {
+
+		// record phase change events
+		if original.Status.Phase != nodePool.Status.Phase {
+			switch nodePool.Status.Phase {
+			case nodepoolv1.NodePoolPhaseReady:
+				if r.Recorder != nil {
+					r.Recorder.Event(&nodePool, corev1.EventTypeNormal, "Ready",
+						nodePool.Status.Message)
+				}
+			case nodepoolv1.NodePoolPhaseDegraded:
+				if r.Recorder != nil {
+					r.Recorder.Event(&nodePool, corev1.EventTypeWarning, "Degraded",
+						nodePool.Status.Message)
+				}
+			case nodepoolv1.NodePoolPhasePending:
+				if r.Recorder != nil {
+					r.Recorder.Event(&nodePool, corev1.EventTypeNormal, "Pending",
+						nodePool.Status.Message)
+				}
+			}
+		}
+
 		if err := r.Status().Patch(ctx, &nodePool, client.MergeFrom(original)); err != nil {
 			return ctrl.Result{}, err
 		}
