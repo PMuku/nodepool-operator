@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -36,6 +37,9 @@ type NodePoolReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+// Finalizer for NodePool
+const finalizerName = "nodepool.k8s.local/finalizer"
 
 // +kubebuilder:rbac:groups=nodepool.k8s.local,resources=nodepools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=nodepool.k8s.local,resources=nodepools/status,verbs=get;update;patch
@@ -58,6 +62,33 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var nodePool nodepoolv1.NodePool
 	if err := r.Get(ctx, req.NamespacedName, &nodePool); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if nodePool.DeletionTimestamp != nil {
+		// Release all assigned nodes
+		assigned, err := r.getAssignedNodes(ctx, &nodePool)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		for i := range assigned {
+			if err := r.releaseNodeFromPool(ctx, &assigned[i], &nodePool); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Remove finalizer
+		controllerutil.RemoveFinalizer(&nodePool, finalizerName)
+
+		if err := r.Update(ctx, &nodePool); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(&nodePool, finalizerName) {
+		controllerutil.AddFinalizer(&nodePool, finalizerName)
+		return ctrl.Result{Requeue: true}, r.Update(ctx, &nodePool)
 	}
 
 	assigned, err := r.getAssignedNodes(ctx, &nodePool)
