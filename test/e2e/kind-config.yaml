@@ -1,0 +1,38 @@
+# Kind cluster configuration for E2E tests
+# Creates a cluster with 1 control-plane + 3 worker nodes
+# One worker is designated as a "GPU node" (simulated via labels)
+#
+# Usage:
+#   kind create cluster --name nodepool-operator-test-e2e --config test/e2e/kind-config.yaml
+#
+# Node layout after creation:
+#   - nodepool-operator-test-e2e-control-plane  (control-plane, excluded from pools)
+#   - nodepool-operator-test-e2e-worker         (regular worker)
+#   - nodepool-operator-test-e2e-worker2        (regular worker)
+#   - nodepool-operator-test-e2e-worker3        (labeled as GPU node post-creation)
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+nodes:
+  # Control plane node - manages the cluster
+  # Excluded from NodePool assignment by the operator
+  - role: control-plane
+
+  # Worker node 1 - regular worker
+  # Available for non-GPU NodePools
+  - role: worker
+
+  # Worker node 2 - regular worker
+  # Available for non-GPU NodePools
+  - role: worker
+
+  # Worker node 3 - will be labeled as GPU node after creation
+  # Available for GPU-specific NodePools (with matching selector)
+  - role: worker
+
+# Networking configuration (using default CNI)
+networking:
+  # Disable default CNI to use kindnet (simpler for testing)
+  disableDefaultCNI: false
+
