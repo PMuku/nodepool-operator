@@ -66,9 +66,10 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= nodepool-operator-test-e2e
+KIND_CONFIG ?= test/e2e/kind-config.yaml
 
 .PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+setup-test-e2e: ## Set up a Kind cluster for e2e tests with 3 workers (1 GPU node)
 	@command -v $(KIND) >/dev/null 2>&1 || { \
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
@@ -77,8 +78,15 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 		*"$(KIND_CLUSTER)"*) \
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
 		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
+			echo "Creating Kind cluster '$(KIND_CLUSTER)' with 3 workers..."; \
+			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG); \
+			echo "Waiting for nodes to be ready..."; \
+			$(KUBECTL) wait --for=condition=Ready nodes --all --timeout=120s; \
+			echo "Labeling worker3 as GPU node..."; \
+			$(KUBECTL) label node $(KIND_CLUSTER)-worker3 nvidia.com/gpu.present=true --overwrite; \
+			$(KUBECTL) label node $(KIND_CLUSTER)-worker3 gpu-type=simulated --overwrite; \
+			echo "Kind cluster ready with nodes:"; \
+			$(KUBECTL) get nodes --show-labels | grep -E "NAME|worker" ;; \
 	esac
 
 .PHONY: test-e2e
