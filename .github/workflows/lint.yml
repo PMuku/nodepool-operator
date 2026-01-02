@@ -1,23 +1,47 @@
 name: Lint
 
 on:
-  push:
-  pull_request:
+  #push:
+  #pull_request:
+  workflow_dispatch: 
 
 jobs:
   lint:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
     steps:
+      # Using raw shell commands
       - name: Clone the code
-        uses: actions/checkout@v4
+        run: |
+         git clone https://github.com/${{ github.repository }} .
+         git checkout ${{ github.ref }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Setup Go and its dependencies
+        run: |
+         # Extract Go version from go.mod
+         GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+         echo "Installing Go $GO_VERSION"
 
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
+         curl -L https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tgz
+         sudo tar -C /usr/local -xzf go.tgz
+
+         echo "/usr/local/go/bin" >> $GITHUB_PATH
+         echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+
+      - name:  Run lint / static analysis (golangci-lint)
+        run: |
+         make lint
+
+      # Using prebuilt github actions
+      #- name: Clone the code
+      #  uses: actions/checkout@v4
+
+      #- name: Setup Go
+      #  uses: actions/setup-go@v5
+      #  with:
+      #    go-version-file: go.mod
+
+      # - name: Run linter
+      #  uses: golangci/golangci-lint-action@v8
+      #  with:
+      #    version: v2.5.0
