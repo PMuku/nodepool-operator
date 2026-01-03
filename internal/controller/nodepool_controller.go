@@ -69,35 +69,7 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if nodePool.DeletionTimestamp != nil {
-		// Release all assigned nodes
-		assigned, err := r.getAssignedNodes(ctx, &nodePool)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		for i := range assigned {
-			if err := r.releaseNodeFromPool(ctx, &assigned[i], &nodePool); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		// record finalizer cleanup
-		if r.Recorder != nil {
-			r.Recorder.Eventf(
-				&nodePool,
-				corev1.EventTypeNormal,
-				"CleanedUp",
-				"Released all nodes and removed NodePool finalizer",
-			)
-		}
-
-		// Remove finalizer
-		controllerutil.RemoveFinalizer(&nodePool, finalizerName)
-
-		if err := r.Update(ctx, &nodePool); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
+		return r.reconcileDeletionHelper(ctx, &nodePool)
 	}
 
 	if !controllerutil.ContainsFinalizer(&nodePool, finalizerName) {
