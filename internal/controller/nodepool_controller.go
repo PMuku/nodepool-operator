@@ -68,6 +68,7 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Handle deletion
 	if nodePool.DeletionTimestamp != nil {
 		return r.reconcileDeletionHelper(ctx, &nodePool)
 	}
@@ -77,118 +78,26 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{Requeue: true}, r.Update(ctx, &nodePool)
 	}
 
-	assigned, err := r.getAssignedNodes(ctx, &nodePool)
+	// get current cluster state
+	currPoolState, err := r.getClusterState(ctx, &nodePool)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	usableAssigned, err := r.getUsableAssignedNodes(ctx, &nodePool)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	eligibleUnassigned, err := r.getEligibleUnassignedNodes(ctx, &nodePool)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	safeToRelease, err := r.getSafeToReleaseAssignedNodes(ctx, &nodePool)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	assignedCount := len(assigned)
-	usableAssignedCount := len(usableAssigned)
-	eligibleUnassignedCount := len(eligibleUnassigned)
-	safeToReleaseCount := len(safeToRelease)
-	desiredCount := int(nodePool.Spec.Size)
 
 	// Log nodepool state
 	log.Info("NodePool reconciliation state",
 		"nodepool", nodePool.Name,
 		"desiredSize", nodePool.Spec.Size,
-		"assigned", assignedCount,
-		"usableAssigned", usableAssignedCount,
-		"eligibleUnassigned", eligibleUnassignedCount,
-		"safeToRelease", safeToReleaseCount,
+		"assigned", len(currPoolState.assigned),
+		"usableAssigned", len(currPoolState.usableAssigned),
+		"eligibleUnassigned", len(currPoolState.eligibleUnassigned),
+		"safeToRelease", len(currPoolState.safeToRelease),
 	)
 
-	// Scale-up
-	effectiveAssignedCount := usableAssignedCount + safeToReleaseCount
-	needed := desiredCount - effectiveAssignedCount
-	if needed > 0 && eligibleUnassignedCount > 0 {
-		toAssign := min(needed, eligibleUnassignedCount)
-
-		successfulAssign, failure := 0, false
-		for i := 0; i < toAssign; i++ {
-			if err := r.assignNodeToPool(ctx, &eligibleUnassigned[i], &nodePool); err != nil {
-				// record scale-up failure
-				if r.Recorder != nil && !failure {
-					r.Recorder.Eventf(
-						&nodePool,
-						corev1.EventTypeWarning,
-						"AssignFailed",
-						"Failed to assign node %s: %v",
-						eligibleUnassigned[i].Name,
-						err,
-					)
-					failure = true
-				}
-				return ctrl.Result{}, err
-			}
-			successfulAssign++
-		}
-
-		// record scale-up success
-		if r.Recorder != nil && successfulAssign > 0 {
-			r.Recorder.Eventf(
-				&nodePool,
-				corev1.EventTypeNormal,
-				"ScaledUp",
-				"Assigned %d node(s) to pool",
-				successfulAssign,
-			)
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Scale-down
-	excess := assignedCount - desiredCount
-	if excess > 0 && safeToReleaseCount > 0 {
-		toRelease := min(excess, safeToReleaseCount)
-
-		successfulRelease, failure := 0, false
-		for i := 0; i < toRelease; i++ {
-			if err := r.releaseNodeFromPool(ctx, &safeToRelease[i], &nodePool); err != nil {
-				// record scale-down failure
-				if r.Recorder != nil && !failure {
-					r.Recorder.Eventf(
-						&nodePool,
-						corev1.EventTypeWarning,
-						"ReleaseFailed",
-						"Failed to release node %s: %v",
-						safeToRelease[i].Name,
-						err,
-					)
-					failure = true
-				}
-				return ctrl.Result{}, err
-			}
-			successfulRelease++
-		}
-
-		// record scale-down success
-		if r.Recorder != nil && successfulRelease > 0 {
-			r.Recorder.Eventf(
-				&nodePool,
-				corev1.EventTypeNormal,
-				"ScaledDown",
-				"Released %d node(s) from pool",
-				successfulRelease,
-			)
-		}
-
-		return ctrl.Result{}, nil
+	// Scaling logic - continue if NO scaling
+	scaled, result, err := r.scalingReconcile(ctx, &nodePool, currPoolState)
+	if scaled {
+		return result, err
 	}
 
 	// Status update
