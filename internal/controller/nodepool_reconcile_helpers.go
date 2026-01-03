@@ -2,10 +2,14 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"time"
 
 	nodepoolv1 "github.com/PMuku/nodepool-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -125,4 +129,105 @@ func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// functions to get and reconcile status
+func getStatus(nodePool *nodepoolv1.NodePool, state *poolState) nodepoolv1.NodePoolStatus {
+	desiredCount := int(nodePool.Spec.Size)
+	assignedCount := len(state.assigned)
+	usableAssignedCount := len(state.usableAssigned)
+	eligibleUnassignedCount := len(state.eligibleUnassigned)
+	safeToReleaseCount := len(state.safeToRelease)
+	effectiveAssignedCount := usableAssignedCount + safeToReleaseCount
+
+	newStatus := nodepoolv1.NodePoolStatus{
+		DesiredSize:   int32(desiredCount),
+		CurrentSize:   int32(effectiveAssignedCount),
+		AssignedNodes: make([]string, 0, assignedCount),
+	}
+	for _, n := range state.assigned {
+		newStatus.AssignedNodes = append(newStatus.AssignedNodes, n.Name)
+	}
+
+	switch {
+	case usableAssignedCount == desiredCount:
+		newStatus.Phase = nodepoolv1.NodePoolPhaseReady
+		newStatus.Message = fmt.Sprintf(
+			"Pool is ready (%d/%d nodes available)",
+			usableAssignedCount,
+			desiredCount,
+		)
+
+	case usableAssignedCount < desiredCount && eligibleUnassignedCount > 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhasePending
+		newStatus.Message = fmt.Sprintf(
+			"Waiting for eligible nodes (%d/%d available, %d eligible)",
+			usableAssignedCount,
+			desiredCount,
+			eligibleUnassignedCount,
+		)
+
+	case usableAssignedCount < desiredCount && eligibleUnassignedCount == 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhaseDegraded
+		newStatus.Message = fmt.Sprintf(
+			"%d nodes needed but no eligible nodes available",
+			desiredCount-usableAssignedCount,
+		)
+
+	case usableAssignedCount < desiredCount && safeToReleaseCount > 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhaseDegraded
+		newStatus.Message = fmt.Sprintf(
+			"Pool degraded: %d/%d nodes available (%d in maintenance)",
+			usableAssignedCount,
+			desiredCount,
+			safeToReleaseCount,
+		)
+
+	case usableAssignedCount > desiredCount && safeToReleaseCount == 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhasePending
+		newStatus.Message = fmt.Sprintf(
+			"Over capacity (%d/%d), waiting for nodes to be cordoned",
+			usableAssignedCount,
+			desiredCount,
+		)
+
+	case usableAssignedCount > desiredCount && safeToReleaseCount > 0:
+		newStatus.Phase = nodepoolv1.NodePoolPhasePending
+		newStatus.Message = fmt.Sprintf(
+			"Over capacity (%d/%d); %d node(s) ready for release",
+			usableAssignedCount,
+			desiredCount,
+			safeToReleaseCount,
+		)
+	}
+
+	return newStatus
+}
+
+func (r *NodePoolReconciler) reconcileStatus(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState) (ctrl.Result, error) {
+	original := nodePool.DeepCopy()
+	newStatus := getStatus(nodePool, state)
+
+	nodePool.Status = newStatus
+	if reflect.DeepEqual(original.Status, nodePool.Status) {
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+
+	// record phase change events
+	if original.Status.Phase != nodePool.Status.Phase && r.Recorder != nil {
+		switch nodePool.Status.Phase {
+		case nodepoolv1.NodePoolPhaseReady:
+			r.Recorder.Event(nodePool, corev1.EventTypeNormal, "Ready",
+				nodePool.Status.Message)
+		case nodepoolv1.NodePoolPhaseDegraded:
+			r.Recorder.Event(nodePool, corev1.EventTypeWarning, "Degraded",
+				nodePool.Status.Message)
+		case nodepoolv1.NodePoolPhasePending:
+			r.Recorder.Event(nodePool, corev1.EventTypeNormal, "Pending",
+				nodePool.Status.Message)
+		}
+	}
+
+	return ctrl.Result{RequeueAfter: 5 * time.Minute},
+		r.Status().Patch(ctx, nodePool, client.MergeFrom(original))
 }
