@@ -88,19 +88,19 @@ func (r *NodePoolReconciler) scalingReconcile(ctx context.Context, nodePool *nod
 	effectiveAssignedCount := usableAssignedCount + safeToReleaseCount
 
 	if needed := desiredCount - effectiveAssignedCount; needed > 0 && eligibleUnassignedCount > 0 {
-		res, err := r.scaleUp(ctx, nodePool, state, needed)
-		return true, res, err
+		err := r.scaleUp(ctx, nodePool, state, needed)
+		return true, ctrl.Result{}, err
 	}
 
 	if excess := assignedCount - desiredCount; excess > 0 && safeToReleaseCount > 0 {
-		res, err := r.scaleDown(ctx, nodePool, state, excess)
-		return true, res, err
+		err := r.scaleDown(ctx, nodePool, state, excess)
+		return true, ctrl.Result{}, err
 	}
 
 	return false, ctrl.Result{}, nil
 }
 
-func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, needed int) (ctrl.Result, error) {
+func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, needed int) error {
 	toAssign := min(needed, len(state.eligibleUnassigned))
 	successfulAssign := 0
 
@@ -122,7 +122,7 @@ func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.N
 				)
 			}
 
-			return ctrl.Result{}, err
+			return err
 		}
 		successfulAssign++
 	}
@@ -136,10 +136,10 @@ func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.N
 			successfulAssign,
 		)
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
-func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, excess int) (ctrl.Result, error) {
+func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, excess int) error {
 	toRelease := min(excess, len(state.safeToRelease))
 	successfulRelease := 0
 
@@ -160,7 +160,7 @@ func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1
 					err,
 				)
 			}
-			return ctrl.Result{}, err
+			return err
 		}
 		successfulRelease++
 	}
@@ -175,8 +175,7 @@ func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1
 			successfulRelease,
 		)
 	}
-
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // functions to get and reconcile status
