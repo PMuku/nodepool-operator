@@ -92,9 +92,9 @@ func (r *NodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 
 	// Scaling logic - continue if NO scaling
-	scaled, result, err := r.scalingReconcile(ctx, &nodePool, currPoolState)
+	scaled, err := r.scalingReconcile(ctx, &nodePool, currPoolState)
 	if scaled {
-		return result, err
+		return ctrl.Result{}, err
 	}
 
 	// Status update

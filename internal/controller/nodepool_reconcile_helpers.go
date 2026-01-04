@@ -79,7 +79,7 @@ func (r *NodePoolReconciler) getClusterState(ctx context.Context, nodePool *node
 }
 
 // helper function to handle scaling logic
-func (r *NodePoolReconciler) scalingReconcile(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState) (bool, ctrl.Result, error) {
+func (r *NodePoolReconciler) scalingReconcile(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState) (bool, error) {
 	desiredCount := int(nodePool.Spec.Size)
 	assignedCount := len(state.assigned)
 	usableAssignedCount := len(state.usableAssigned)
@@ -89,15 +89,15 @@ func (r *NodePoolReconciler) scalingReconcile(ctx context.Context, nodePool *nod
 
 	if needed := desiredCount - effectiveAssignedCount; needed > 0 && eligibleUnassignedCount > 0 {
 		err := r.scaleUp(ctx, nodePool, state, needed)
-		return true, ctrl.Result{}, err
+		return true, err
 	}
 
 	if excess := assignedCount - desiredCount; excess > 0 && safeToReleaseCount > 0 {
 		err := r.scaleDown(ctx, nodePool, state, excess)
-		return true, ctrl.Result{}, err
+		return true, err
 	}
 
-	return false, ctrl.Result{}, nil
+	return false, nil
 }
 
 func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, needed int) error {
