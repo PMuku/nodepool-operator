@@ -102,6 +102,7 @@ func (r *NodePoolReconciler) scalingReconcile(ctx context.Context, nodePool *nod
 
 func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, needed int) (ctrl.Result, error) {
 	toAssign := min(needed, len(state.eligibleUnassigned))
+	successfulAssign := 0
 
 	for i := 0; i < toAssign; i++ {
 		if err := r.assignNodeToPool(
@@ -109,14 +110,38 @@ func (r *NodePoolReconciler) scaleUp(ctx context.Context, nodePool *nodepoolv1.N
 			&state.eligibleUnassigned[i],
 			nodePool,
 		); err != nil {
+			// record scale-up failure
+			if r.Recorder != nil {
+				r.Recorder.Eventf(
+					nodePool,
+					corev1.EventTypeWarning,
+					"AssignFailed",
+					"Failed to assign node %s: %v",
+					state.eligibleUnassigned[i].Name,
+					err,
+				)
+			}
+
 			return ctrl.Result{}, err
 		}
+		successfulAssign++
+	}
+	// record scale-up success
+	if r.Recorder != nil && successfulAssign > 0 {
+		r.Recorder.Eventf(
+			nodePool,
+			corev1.EventTypeNormal,
+			"ScaledUp",
+			"Assigned %d node(s) to pool",
+			successfulAssign,
+		)
 	}
 	return ctrl.Result{}, nil
 }
 
 func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1.NodePool, state *poolState, excess int) (ctrl.Result, error) {
 	toRelease := min(excess, len(state.safeToRelease))
+	successfulRelease := 0
 
 	for i := 0; i < toRelease; i++ {
 		if err := r.releaseNodeFromPool(
@@ -124,8 +149,31 @@ func (r *NodePoolReconciler) scaleDown(ctx context.Context, nodePool *nodepoolv1
 			&state.safeToRelease[i],
 			nodePool,
 		); err != nil {
+			// record scale-down failure
+			if r.Recorder != nil {
+				r.Recorder.Eventf(
+					nodePool,
+					corev1.EventTypeWarning,
+					"ReleaseFailed",
+					"Failed to release node %s: %v",
+					state.safeToRelease[i].Name,
+					err,
+				)
+			}
 			return ctrl.Result{}, err
 		}
+		successfulRelease++
+	}
+
+	// record scale-down success
+	if r.Recorder != nil && successfulRelease > 0 {
+		r.Recorder.Eventf(
+			nodePool,
+			corev1.EventTypeNormal,
+			"ScaledDown",
+			"Released %d node(s) from pool",
+			successfulRelease,
+		)
 	}
 
 	return ctrl.Result{}, nil
