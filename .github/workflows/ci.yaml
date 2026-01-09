@@ -15,20 +15,20 @@
 
 name: CI
 on:
-  workflow_dispatch:
-  # push:
-  #   branches:
-  #     - develop        # feature merges trigger CI
-  #   paths-ignore:
-  #     - '**.md'
-  #     - '.github/ISSUE_TEMPLATE/**'
+  # workflow_dispatch:
+  push:
+    branches:
+      - develop        # feature merges trigger CI
+    paths-ignore:
+      - '**.md'
+      - '.github/ISSUE_TEMPLATE/**'
 
-  # pull_request:
-  #   branches:
-  #     - main           # PR to main triggers full CI
-  #   paths-ignore:
-  #     - '**.md'
-  #     - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    branches:
+      - main           # PR to main triggers full CI
+    paths-ignore:
+      - '**.md'
+      - '.github/ISSUE_TEMPLATE/**'
 
 jobs:
   # ===========================================================================
